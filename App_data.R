@@ -9,31 +9,31 @@ library(stringr)
 library(purrr)
 library(curl)
 
-options(encoding = 'UTF-8')
 options(scipen=15)
 options(timeout=1800)
 
 
 #Emplacement du fichier de travail 
-current_directory <- dirname(rstudioapi::getSourceEditorContext()$path)
+#current_directory <- dirname(rstudioapi::getSourceEditorContext()$path)
 #Espace de travail 
-setwd(current_directory)
-
-#Liste des types de véhicules
-list_vehicule <- c("vp","vul","pl","tcp")
-
-#Chemin d'accès aux fichiers IGN ADMIN EXPRESS
-path_map <- "ADMIN-EXPRESS-COG_3-0__SHP__FRA_2021-05-19/ADMIN-EXPRESS-COG/1_DONNEES_LIVRAISON_2021-05-19/ADECOG_3-0_SHP_LAMB93_FR/"
+#setwd(current_directory)
 
 ################################
 ###TELECHARGEMENT DES DONNEES###
 ################################
-#Création de dossiers pour stocker les données 
-dir.create(paste0(current_directory,"/IGN"))
-dir.create(paste0(current_directory,"/SDES"))
 
+#Chemin d'accès aux fichiers IGN ADMIN EXPRESS
+path_map <- "ADMIN-EXPRESS-COG_3-0__SHP__FRA_2021-05-19/ADMIN-EXPRESS-COG/1_DONNEES_LIVRAISON_2021-05-19/ADECOG_3-0_SHP_LAMB93_FR/"
+#Téléchargement des cartes des communes sur le site de l'IGN
+dir.create("IGN")
+curl_download("ftp://Admin_Express_ext:Dahnoh0eigheeFok@ftp3.ign.fr/ADMIN-EXPRESS-COG_3-0__SHP__FRA_L93_2021-05-19.7z",
+              "IGN/ADMIN-EXPRESS-COG_3-0__SHP__FRA_L93_2021-05-19.7z", mode="wb")
+archive_extract("IGN/ADMIN-EXPRESS-COG_3-0__SHP__FRA_L93_2021-05-19.7z",dir="IGN")
 
 #Téléchargement et décompression des données de parc de véhicules 2021
+dir.create("SDES")
+#Liste des types de véhicules
+list_vehicule <- c("vp","vul","pl","tcp")
 
 for(vehicule in list_vehicule){
   print(vehicule)
@@ -43,43 +43,6 @@ for(vehicule in list_vehicule){
   #Décompression du fichier 2021
   unzip(paste0("SDES/parc_",vehicule,"_communes.zip"),file= paste0("Parc_",toupper(vehicule),"_Communes_2021.xlsx"),exdir="SDES")
 }
- 
-#Téléchargement des cartes des communes sur le site de l'IGN
-curl_download("ftp://Admin_Express_ext:Dahnoh0eigheeFok@ftp3.ign.fr/ADMIN-EXPRESS-COG_3-0__SHP__FRA_L93_2021-05-19.7z",
-              "IGN/ADMIN-EXPRESS-COG_3-0__SHP__FRA_L93_2021-05-19.7z", mode="wb")
-
-#Contenu de l'archive
-archive_content <- archive("IGN/ADMIN-EXPRESS-COG_3-0__SHP__FRA_L93_2021-05-19.7z")
-#Emplacement des cartes communes et EPCI dans l'archive
-files_map <- c("cpg","dbf","prj","shp","shx")
-files_map <- c(paste("COMMUNE",files_map,sep="."),paste("EPCI",files_map,sep="."))
-files_map <- paste0(path_map,files_map)
-#Extraction des fichiers 
-archive_extract("IGN/ADMIN-EXPRESS-COG_3-0__SHP__FRA_L93_2021-05-19.7z",
-                dir="IGN",
-                files = files_map)
-
-#Lecture de l'ensemble des fichiers de parc
-parc_veh <- lapply(list_vehicule,function(vehicule){
-  print(vehicule)
-  #Lecture du fichier excel
-  parc_zfe <- read_xlsx(paste0("SDES/Parc_",toupper(vehicule),"_Communes_2021.xlsx"))
-  #Nouveaux noms de variables
-  parc_zfe <- plyr::rename(parc_zfe,c("Code Epci"="codepci","Code commune"="depcom","Libellé EPCI"="libepci",
-                                "Parc au 01/01/2021"="parc2021","Vignette Crit'air"="critair",
-                                "Energie"="energie","Libellé commune"="libcom"))
-  #Selection des variables d'intéret 
-  parc_zfe <- subset(parc_zfe,select = c("codepci","depcom","parc2021","critair","energie","libcom","libepci"))
-  parc_zfe$vehicule <- vehicule
-  return(parc_zfe)
-})
-
-parc_veh <- rbindlist(parc_veh)
-#Correction d'erreur 
-parc_veh$energie <- revalue(as.factor(parc_veh$energie),c("Electrique"="Electrique et hydrogène",
-                                                          "Inconnu"="Carburant inconnu"))
-parc_veh$critair <- gsub("Crit'air","Crit'Air",parc_veh$critair)
-parc_veh$critair <- revalue(as.factor(parc_veh$critair),c("Inconnu"="Vignette inconnue"))
 
 ##############################
 ###CARTES ET STATUT DES ZFE###
@@ -131,7 +94,6 @@ for(z in etat_zfe$codzfe){
   map_epci[map_epci$codgeo==codgeo_zfe,z] <- 2
 }
 
-
 #Traitement du cas spécifique de la vallée de l'Arve (Plusieurs EPCI pour une même ZFE)
 list_codzfe_arve <- etat_zfe[etat_zfe$codgeo %in% c("200000172","200023372","200033116","200034882"),]$codzfe
 etat_zfe[etat_zfe$codgeo %in% c("200000172","200023372","200033116","200034882"),"codzfe"] <- "ZFEARV"
@@ -156,9 +118,9 @@ contour_zfe <- st_transform(contour_zfe,crs=4326)
 contour_zfe <- st_cast(contour_zfe, "MULTILINESTRING")
 
 #Enregistrement des données et cartes sur les EPCI et les ZFE
-dir.create(paste0(current_directory,"/Map_EPCI"))
-dir.create(paste0(current_directory,"/Map_ZFE"))
-dir.create(paste0(current_directory,"/Data"))
+dir.create("Map_EPCI")
+dir.create("Map_ZFE")
+dir.create("Data")
 
 map_epci <- st_transform(map_epci,crs=4326)
 st_write(map_epci[,c("codgeo","libgeo","typgeo")],layer_options = "ENCODING=UTF-8","Map_EPCI/map_epci.shp",delete_dsn = T)
@@ -177,14 +139,37 @@ map_commune <- st_transform(map_commune,crs=4326)
 map_commune$typgeo <- "com"
 #map_commune[map_commune$EPCI %in% c(200054781,200023430),]
 
-dir.create(paste0(current_directory,"/Map_com"))
+dir.create("Map_com")
 st_write(map_commune,"Map_com/map_commune.shp", layer_options = "ENCODING=UTF-8",delete_dsn = T)
 
 ######################################
 ###MISE EN FORME DE DONNEES DE PARC###
 ######################################
 
-#Mise en forme des données de parc pour l'application RShiny
+#Lecture de l'ensemble des fichiers de parc
+parc_veh <- lapply(list_vehicule,function(vehicule){
+  print(vehicule)
+  #Lecture du fichier excel
+  parc_zfe <- read_xlsx(paste0("SDES/Parc_",toupper(vehicule),"_Communes_2021.xlsx"))
+  #Nouveaux noms de variables
+  parc_zfe <- plyr::rename(parc_zfe,c("Code Epci"="codepci","Code commune"="depcom","Libellé EPCI"="libepci",
+                                      "Parc au 01/01/2021"="parc2021","Vignette Crit'air"="critair",
+                                      "Energie"="energie","Libellé commune"="libcom"))
+  #Selection des variables d'intéret 
+  parc_zfe <- subset(parc_zfe,select = c("codepci","depcom","parc2021","critair","energie","libcom","libepci"))
+  parc_zfe$vehicule <- vehicule
+  return(parc_zfe)
+})
+
+parc_veh <- rbindlist(parc_veh)
+#Correction d'erreur 
+parc_veh$energie <- revalue(as.factor(parc_veh$energie),c("Electrique"="Electrique et hydrogène","Inconnu"="Carburant inconnu"))
+parc_veh$critair <- gsub("Crit'air","Crit'Air",parc_veh$critair)
+parc_veh$critair_det <- revalue(factor(parc_veh$critair,levels=c("Crit'Air E","Crit'Air 1","Crit'Air 2","Crit'Air 3","Crit'Air 4","Crit'Air 5","Inconnu","Non classée")),
+                                replace=c("Inconnu"="Vignette inconnue"))
+parc_veh$critair <- revalue(parc_veh$critair_det,c("Vignette inconnue"="Non classés ou inconnus","Non classée"="Non classés ou inconnus"))
+
+####MISE EN FORME POUR L'APPLICATION RSHINY####
 #Données France entière
 parc_france_rshiny <- aggregate(data=parc_veh[vehicule %in% c("vp","vul"),],
                                 parc2021~vehicule+critair,FUN=sum)
@@ -215,9 +200,7 @@ parc_rshiny[,total := sum(value),by=c("vehicule","codgeo","typgeo")]
 
 write.csv(parc_rshiny,"Data/data_parc.csv",row.names=F,fileEncoding = "UTF-8")
 
-######################################
-#MISE EN FORME DES DONNEES POUR EXCEL#
-######################################
+#####MISE EN FORME DES DONNEES POUR EXCEL#####
 
 #Sélection des EPCI ZFE 
 parc_veh_zfe <- parc_veh[codepci %in% etat_zfe$codgeo,]
@@ -239,7 +222,7 @@ parc_zfe_excel <- function(geo,veh){
   if(geo=="com"){var_geo="libepci+codepci+libcom+depcom"}
   
   #Statistiques pour l'ensemble, les vignettes Crit'Air, le carburant et le croisement des deux 
-  stat_zfe <- lapply(c("1","critair","energie","paste(critair,energie,sep=' - ')"),function(var_veh){
+  stat_zfe <- lapply(c("1","critair_det","energie","paste(critair_det,energie,sep=' - ')"),function(var_veh){
     dcast(data=parc_veh_zfe[vehicule==veh,],as.formula(paste(var_geo,var_veh,sep="~")),value.var = "parc2021",fun.aggregate = round0_sum)
   })
   
