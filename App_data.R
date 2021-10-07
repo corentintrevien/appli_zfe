@@ -68,7 +68,6 @@ etat_zfe$EtatZFEd <- gsub("ZFE mise en place prochainement",
 etat_zfe$EtatZFEd <- gsub("ZFE existante",
                           "a mis en place une ZFE",etat_zfe$EtatZFEd) 
 
-z <- "ZFE001"
 #EPCI voisines de chaque ZFE
 for(z in etat_zfe$codzfe){
   print(z)
