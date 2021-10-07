@@ -12,12 +12,6 @@ library(curl)
 options(scipen=15)
 options(timeout=1800)
 
-
-#Emplacement du fichier de travail 
-#current_directory <- dirname(rstudioapi::getSourceEditorContext()$path)
-#Espace de travail 
-#setwd(current_directory)
-
 ################################
 ###TELECHARGEMENT DES DONNEES###
 ################################
